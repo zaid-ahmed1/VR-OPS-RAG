@@ -2,10 +2,19 @@
 FastAPI app — RAG endpoints for SOP documents.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
+load_dotenv()  # must run before rag is imported (reads env vars at module level)
+
 from fastapi import FastAPI, HTTPException, UploadFile, File
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from api.models import (
     DeleteResponse,
@@ -17,19 +26,17 @@ from api.models import (
 )
 from api import rag
 
-load_dotenv()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm up: ensure ChromaDB collection exists on startup
     rag.get_collection()
+    rag.embed(["warmup"])  # pre-establish HTTPS connection to OpenAI
     yield
 
 
 app = FastAPI(
     title="VR-OPS RAG API",
-    description="RAG API for querying SOP documents via Ollama + ChromaDB",
+    description="RAG API for querying SOP documents via OpenAI + ChromaDB",
     version="0.1.0",
     lifespan=lifespan,
 )

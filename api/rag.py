@@ -1,18 +1,22 @@
 """
 RAG pipeline: ingestion, querying, deletion.
-No LangChain — raw ChromaDB + Ollama clients for minimal overhead.
+ChromaDB for vector storage, OpenAI for embeddings and generation.
 """
 
 import io
+import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 import chromadb
-import ollama
+import openai as openai_module
 from docx import Document as DocxDocument
 from pypdf import PdfReader
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -20,12 +24,12 @@ from pypdf import PdfReader
 # ---------------------------------------------------------------------------
 
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./data/chroma")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2:3b")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "400"))
 
 COLLECTION_NAME = "sops"
-CHUNK_SIZE = 600       # characters
+CHUNK_SIZE = 400       # characters
 CHUNK_OVERLAP = 80     # characters
 
 
@@ -35,6 +39,7 @@ CHUNK_OVERLAP = 80     # characters
 
 _chroma_client: Optional[chromadb.PersistentClient] = None
 _collection: Optional[chromadb.Collection] = None
+_openai: Optional[openai_module.OpenAI] = None
 
 
 def get_collection() -> chromadb.Collection:
@@ -49,11 +54,14 @@ def get_collection() -> chromadb.Collection:
 
 
 # ---------------------------------------------------------------------------
-# Ollama client
+# OpenAI client (singleton)
 # ---------------------------------------------------------------------------
 
-def _ollama_client() -> ollama.Client:
-    return ollama.Client(host=OLLAMA_BASE_URL)
+def _openai_client() -> openai_module.OpenAI:
+    global _openai
+    if _openai is None:
+        _openai = openai_module.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _openai
 
 
 # ---------------------------------------------------------------------------
@@ -131,12 +139,8 @@ def _split(text: str, size: int, overlap: int, separators: list[str]) -> list[st
 # ---------------------------------------------------------------------------
 
 def embed(texts: list[str]) -> list[list[float]]:
-    client = _ollama_client()
-    vectors = []
-    for text in texts:
-        resp = client.embeddings(model=EMBED_MODEL, prompt=text)
-        vectors.append(resp["embedding"])
-    return vectors
+    resp = _openai_client().embeddings.create(model=EMBED_MODEL, input=texts)
+    return [item.embedding for item in resp.data]
 
 
 # ---------------------------------------------------------------------------
@@ -231,21 +235,27 @@ SYSTEM_PROMPT = (
 )
 
 
-def query(question: str, top_k: int = 4) -> dict:
+def query(question: str, top_k: int = 3) -> dict:
     """Embed question, retrieve top-k chunks, generate answer."""
-    import time
-    start = time.perf_counter()
+    log.info("query start | llm=%s embed=%s top_k=%d", LLM_MODEL, EMBED_MODEL, top_k)
+
+    t0 = time.perf_counter()
 
     # Embed question
     q_vec = embed([question])[0]
+    t_embed = time.perf_counter() - t0
+    log.info("  embed       %.3fs", t_embed)
 
     # Retrieve
+    t1 = time.perf_counter()
     collection = get_collection()
     results = collection.query(
         query_embeddings=[q_vec],
         n_results=min(top_k, collection.count()),
         include=["documents", "metadatas"],
     )
+    t_retrieve = time.perf_counter() - t1
+    log.info("  retrieve    %.3fs  (%d chunks)", t_retrieve, min(top_k, collection.count()))
 
     chunks = results["documents"][0] if results["documents"] else []
     metas = results["metadatas"][0] if results["metadatas"] else []
@@ -257,20 +267,21 @@ def query(question: str, top_k: int = 4) -> dict:
     context = "\n\n---\n\n".join(context_parts)
 
     # Generate
-    client = _ollama_client()
-    response = client.chat(
+    t2 = time.perf_counter()
+    response = _openai_client().chat.completions.create(
         model=LLM_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Context:\n{context}\n\nQuestion: {question}",
-            },
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
         ],
+        max_tokens=MAX_TOKENS,
     )
+    answer = response.choices[0].message.content
+    t_generate = time.perf_counter() - t2
 
-    answer = response["message"]["content"]
-    elapsed = time.perf_counter() - start
+    elapsed = time.perf_counter() - t0
+    log.info("  generate    %.3fs", t_generate)
+    log.info("  TOTAL       %.3fs", elapsed)
 
     sources = [
         {

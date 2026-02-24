@@ -4,7 +4,7 @@ from typing import Optional
 
 class QueryRequest(BaseModel):
     question: str
-    top_k: Optional[int] = 3
+    top_k: Optional[int] = 1
 
 
 class SourceChunk(BaseModel):
