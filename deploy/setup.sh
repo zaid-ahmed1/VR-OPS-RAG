@@ -39,9 +39,12 @@ if [ ! -f "$ENV_FILE" ]; then
     sudo tee "$ENV_FILE" > /dev/null <<'EOF'
 OPENAI_API_KEY=sk-YOUR_KEY_HERE
 OPENAI_LLM_MODEL=gpt-4o-mini
-OPENAI_EMBED_MODEL=text-embedding-3-small
 CHROMA_PATH=/opt/vr-ops-rag/data/chroma
 MAX_TOKENS=400
+
+# Local embeddings via Ollama (comment out to use OpenAI embeddings instead)
+OLLAMA_BASE_URL=http://localhost:11434
+# EMBED_MODEL=nomic-embed-text  # default when OLLAMA_BASE_URL is set
 EOF
     sudo chown "$SERVICE_USER:$SERVICE_USER" "$ENV_FILE"
     sudo chmod 600 "$ENV_FILE"

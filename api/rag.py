@@ -25,8 +25,10 @@ log = logging.getLogger(__name__)
 
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./data/chroma")
 LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
-EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "400"))
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")  # e.g. http://localhost:11434
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text" if OLLAMA_BASE_URL else "text-embedding-3-small")
 
 COLLECTION_NAME = "sops"
 CHUNK_SIZE = 400       # characters
@@ -40,6 +42,7 @@ CHUNK_OVERLAP = 80     # characters
 _chroma_client: Optional[chromadb.PersistentClient] = None
 _collection: Optional[chromadb.Collection] = None
 _openai: Optional[openai_module.OpenAI] = None
+_embed_client: Optional[openai_module.OpenAI] = None
 
 
 def get_collection() -> chromadb.Collection:
@@ -62,6 +65,16 @@ def _openai_client() -> openai_module.OpenAI:
     if _openai is None:
         _openai = openai_module.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _openai
+
+
+def _embed_client() -> openai_module.OpenAI:
+    global _embed_client
+    if _embed_client is None:
+        if OLLAMA_BASE_URL:
+            _embed_client = openai_module.OpenAI(base_url=f"{OLLAMA_BASE_URL}/v1", api_key="ollama")
+        else:
+            _embed_client = _openai_client()
+    return _embed_client
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +152,7 @@ def _split(text: str, size: int, overlap: int, separators: list[str]) -> list[st
 # ---------------------------------------------------------------------------
 
 def embed(texts: list[str]) -> list[list[float]]:
-    resp = _openai_client().embeddings.create(model=EMBED_MODEL, input=texts)
+    resp = _embed_client().embeddings.create(model=EMBED_MODEL, input=texts)
     return [item.embedding for item in resp.data]
 
 
