@@ -8,3 +8,6 @@ python-multipart
 streamlit
 requests
 python-dotenv
+altair>=5.5.0
+pandas>=2.2.3
+openpyxl>=3.1.5

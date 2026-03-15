@@ -15,9 +15,6 @@ data/
 # Environment
 .env
 
-# Streamlit
-.streamlit/
-
 # OS
 .DS_Store
 Thumbs.db
