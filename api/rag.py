@@ -42,7 +42,7 @@ CHUNK_OVERLAP = 80     # characters
 _chroma_client: Optional[chromadb.PersistentClient] = None
 _collection: Optional[chromadb.Collection] = None
 _openai: Optional[openai_module.OpenAI] = None
-_embed_client: Optional[openai_module.OpenAI] = None
+_embed: Optional[openai_module.OpenAI] = None
 
 
 def get_collection() -> chromadb.Collection:
@@ -68,13 +68,13 @@ def _openai_client() -> openai_module.OpenAI:
 
 
 def _embed_client() -> openai_module.OpenAI:
-    global _embed_client
-    if _embed_client is None:
+    global _embed
+    if _embed is None:
         if OLLAMA_BASE_URL:
-            _embed_client = openai_module.OpenAI(base_url=f"{OLLAMA_BASE_URL}/v1", api_key="ollama")
+            _embed = openai_module.OpenAI(base_url=f"{OLLAMA_BASE_URL}/v1", api_key="ollama")
         else:
-            _embed_client = _openai_client()
-    return _embed_client
+            _embed = _openai_client()
+    return _embed
 
 
 # ---------------------------------------------------------------------------

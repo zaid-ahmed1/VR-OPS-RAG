@@ -23,12 +23,25 @@ if ! id "$SERVICE_USER" &>/dev/null; then
     sudo useradd --system --shell /bin/bash --create-home "$SERVICE_USER"
 fi
 
-# ── 3. Create app directory and copy files ───────────────────────────────────
+# ── 3. Clone or update the repository ─────────────────────────────────────────
 echo "[3/9] Setting up app directory at $APP_DIR..."
-sudo mkdir -p "$APP_DIR"
-sudo rsync -a --exclude '.venv' --exclude '.git' --exclude 'data' \
-    "$(dirname "$(realpath "$0")")/../" "$APP_DIR/"
-sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+REPO_URL=$(git -C "$(dirname "$(realpath "$0")")" remote get-url origin 2>/dev/null || true)
+
+if [ -d "$APP_DIR/.git" ]; then
+    echo "  Existing git repo found — pulling latest..."
+    sudo -u "$SERVICE_USER" git -C "$APP_DIR" pull --ff-only
+elif [ -n "$REPO_URL" ]; then
+    echo "  Cloning from $REPO_URL..."
+    sudo rm -rf "$APP_DIR"
+    sudo git clone "$REPO_URL" "$APP_DIR"
+    sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+else
+    echo "  No git remote found — copying files..."
+    sudo mkdir -p "$APP_DIR"
+    sudo rsync -a --exclude '.venv' --exclude '.git' --exclude 'data' \
+        "$(dirname "$(realpath "$0")")/../" "$APP_DIR/"
+    sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+fi
 
 # ── 4. Python virtual environment and dependencies ──────────────────────────
 echo "[4/9] Creating Python venv and installing dependencies..."
@@ -43,18 +56,22 @@ echo "[5/9] Setting up PostgreSQL..."
 # Generate a random password for the PostgREST authenticator role
 DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=\n')
 
-# Create database and run schema
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-CREATE DATABASE $DB_NAME;
-SQL
+# Create database if it doesn't already exist
+if sudo -u postgres psql -lqt | cut -d\| -f1 | grep -qw "$DB_NAME"; then
+    echo "  Database '$DB_NAME' already exists — skipping creation."
+else
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DB_NAME;"
+    echo "  Database '$DB_NAME' created."
+fi
 
+# Apply schema (safe to re-run — uses IF NOT EXISTS / CREATE OR REPLACE)
 sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$APP_DIR/deploy/schema.sql"
 
 # Set the authenticator password
 sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -c "ALTER ROLE $DB_AUTH_ROLE WITH LOGIN PASSWORD '$DB_PASSWORD';"
 
-echo "  PostgreSQL database '$DB_NAME' created."
+echo "  PostgreSQL setup complete."
 
 # ── 6. .env file ─────────────────────────────────────────────────────────────
 ENV_FILE="$APP_DIR/.env"
