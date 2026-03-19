@@ -1,0 +1,16 @@
+[Unit]
+Description=VR-OPS PostgREST API
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=vrops
+EnvironmentFile=/opt/vr-ops-rag/.env
+# PostgREST reads PGRST_* env vars directly
+ExecStart=/usr/local/bin/postgrest
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

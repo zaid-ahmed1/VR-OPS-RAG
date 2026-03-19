@@ -4,6 +4,7 @@ VR-OPS Combined Dashboard — Performance tracking + SOP document manager.
 
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -35,6 +36,7 @@ st.markdown(
 # ── Shared constants ─────────────────────────────────────────────────────────
 
 API_BASE = "http://localhost:8000"
+POSTGREST_URL = os.environ.get("POSTGREST_URL", "http://localhost:3000")
 DEFAULT_DATA_PATH = Path(__file__).parent / "trainee_performance_sample.xlsx"
 
 STEP_NUMBERS = list(range(1, 9))
@@ -96,8 +98,16 @@ def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data(ttl="1h", show_spinner=False)
-def load_performance_data(path: Path | str) -> pd.DataFrame:
-    return _prepare_dataframe(pd.read_excel(path))
+def load_performance_data() -> tuple[pd.DataFrame, str]:
+    """Load from PostgREST; fall back to the sample xlsx if unavailable."""
+    try:
+        resp = requests.get(f"{POSTGREST_URL}/performance_wide", timeout=10)
+        resp.raise_for_status()
+        df = pd.DataFrame(resp.json())
+        return _prepare_dataframe(df), "PostgreSQL database"
+    except Exception:
+        df = pd.read_excel(DEFAULT_DATA_PATH)
+        return _prepare_dataframe(df), f"Sample data · {DEFAULT_DATA_PATH.name}"
 
 
 def filter_by_horizon(df: pd.DataFrame, horizon_label: str) -> pd.DataFrame:
@@ -267,11 +277,10 @@ with tab_perf:
     bottom_left_cell = cols[0].container(border=True, height="stretch", vertical_alignment="center")
 
     try:
-        data = load_performance_data(DEFAULT_DATA_PATH)
-        data_source_label = f"Sample data · {DEFAULT_DATA_PATH.name}"
+        data, data_source_label = load_performance_data()
         load_ok = True
     except Exception as exc:
-        top_left_cell.error(f"Unable to load the Excel file at {DEFAULT_DATA_PATH}: {exc}")
+        top_left_cell.error(f"Unable to load performance data: {exc}")
         load_ok = False
 
     if load_ok:

@@ -4,7 +4,12 @@
       "Bash(dir:*)",
       "Bash(echo:*)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/zaida/Documents/VR-OPS-RAG/**)",
+      "Bash(done)",
+      "Bash(grep -r \"import\\\\|from\" /c/Users/zaida/Documents/VR-OPS-RAG/*.py /c/Users/zaida/Documents/VR-OPS-RAG/api/*.py /c/Users/zaida/Documents/VR-OPS-RAG/dashboard/*.py)"
     ]
   }
 }
