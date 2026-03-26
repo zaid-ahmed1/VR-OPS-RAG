@@ -83,8 +83,25 @@ def _embed_client() -> openai_module.OpenAI:
 
 def parse_docx(data: bytes) -> str:
     doc = DocxDocument(io.BytesIO(data))
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
+
+    # Walk document body in order (paragraphs and tables interleaved)
+    blocks: list[str] = []
+    for block in doc.element.body:
+        tag = block.tag.split("}")[-1]  # strip namespace
+        if tag == "p":
+            from docx.oxml.ns import qn
+            text = "".join(node.text or "" for node in block.iter(qn("w:t")))
+            if text.strip():
+                blocks.append(text.strip())
+        elif tag == "tbl":
+            from docx.table import Table
+            table = Table(block, doc)
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    blocks.append("  |  ".join(cells))
+
+    return "\n\n".join(blocks)
 
 
 def parse_pdf(data: bytes) -> str:
