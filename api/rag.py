@@ -25,14 +25,14 @@ log = logging.getLogger(__name__)
 
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./data/chroma")
 LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "400"))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "800"))
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")  # e.g. http://localhost:11434
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text" if OLLAMA_BASE_URL else "text-embedding-3-small")
 
 COLLECTION_NAME = "sops"
-CHUNK_SIZE = 400       # characters
-CHUNK_OVERLAP = 80     # characters
+CHUNK_SIZE = 800       # characters — large enough to keep a full SOP step in context
+CHUNK_OVERLAP = 150    # characters
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ SYSTEM_PROMPT = (
 )
 
 
-def query(question: str, top_k: int = 3) -> dict:
+def query(question: str, top_k: int = 5) -> dict:
     """Embed question, retrieve top-k chunks, generate answer."""
     log.info("query start | llm=%s embed=%s top_k=%d", LLM_MODEL, EMBED_MODEL, top_k)
 
