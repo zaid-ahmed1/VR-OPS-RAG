@@ -5,7 +5,7 @@ VR-OPS Combined Dashboard — Performance tracking + SOP document manager.
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 import altair as alt
@@ -60,6 +60,9 @@ HORIZON_OPTIONS = {
     "2 Years": timedelta(days=730),
     "3 Years": timedelta(days=1095),
 }
+DEFAULT_STEP_TRAINEE = "Aisha Khan"
+DEFAULT_STEP_START_DATE = date(2023, 3, 14)
+DEFAULT_STEP_END_DATE = date(2023, 3, 30)
 
 
 # ── Performance dashboard helpers ────────────────────────────────────────────
@@ -296,7 +299,7 @@ with tab_perf:
                     placeholder="Choose trainees to compare.",
                 )
                 horizon = st.pills(
-                    "Time horizon", options=list(HORIZON_OPTIONS.keys()), default="3 Months",
+                    "Time horizon", options=list(HORIZON_OPTIONS.keys()), default="3 Years",
                 )
 
             if not selected_trainees:
@@ -350,10 +353,19 @@ with tab_perf:
 
                 step_source = main_filtered.sort_values("Date")
                 step_trainees = sorted(step_source["Name"].unique())
+                default_step_trainee_index = (
+                    step_trainees.index(DEFAULT_STEP_TRAINEE)
+                    if DEFAULT_STEP_TRAINEE in step_trainees
+                    else 0
+                )
 
                 with step_filter_cell:
                     st.subheader("Step chart filters")
-                    selected_step_trainee = st.selectbox("Trainee", options=step_trainees)
+                    selected_step_trainee = st.selectbox(
+                        "Trainee",
+                        options=step_trainees,
+                        index=default_step_trainee_index,
+                    )
 
                 selected_step_rows = (
                     step_source[step_source["Name"] == selected_step_trainee]
@@ -368,10 +380,14 @@ with tab_perf:
                 )
                 date_min = selected_step_rows["Date"].min().date()
                 date_max = selected_step_rows["Date"].max().date()
+                default_start = max(date_min, min(DEFAULT_STEP_START_DATE, date_max))
+                default_end = max(date_min, min(DEFAULT_STEP_END_DATE, date_max))
+                if default_end < default_start:
+                    default_end = default_start
 
                 with step_filter_cell:
                     selected_date_range = st.date_input(
-                        "Date range", value=(date_min, date_max),
+                        "Date range", value=(default_start, default_end),
                         min_value=date_min, max_value=date_max,
                     )
                     last_session_only = st.button(
