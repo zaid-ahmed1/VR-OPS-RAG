@@ -75,7 +75,7 @@ def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"Missing columns: {', '.join(missing)}")
 
     cleaned = df.loc[:, REQUIRED_COLUMNS].copy()
-    completion_dates = pd.to_datetime(cleaned["Date"], errors="coerce")
+    completion_dates = pd.to_datetime(cleaned["Date"], errors="coerce", utc=True).dt.tz_convert(None)
     errors = pd.to_numeric(cleaned["Number of errors"], errors="coerce")
     completion_minutes = pd.to_numeric(cleaned["Completion Time (mins)"], errors="coerce")
 
