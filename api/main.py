@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()  # must run before rag is imported (reads env vars at module level)
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,6 +74,15 @@ async def list_documents():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return [DocumentMeta(**d) for d in docs]
+
+
+@app.get("/documents/{doc_id}/download")
+async def download_document(doc_id: str):
+    result = rag.get_document_file(doc_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Original file not available for download.")
+    file_path, filename = result
+    return FileResponse(file_path, filename=filename, media_type="application/octet-stream")
 
 
 @app.post("/documents/ingest", response_model=IngestResponse)

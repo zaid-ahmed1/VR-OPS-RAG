@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import shutil
+
 import chromadb
 import openai as openai_module
 from docx import Document as DocxDocument
@@ -24,6 +26,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./data/chroma")
+FILES_DIR = os.getenv("FILES_DIR", "./data/files")
 LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "800"))
 
@@ -187,6 +190,11 @@ def ingest_document(filename: str, data: bytes) -> dict:
     doc_id = str(uuid.uuid4())
     ingested_at = datetime.now(timezone.utc).isoformat()
 
+    file_dir = os.path.join(FILES_DIR, doc_id)
+    os.makedirs(file_dir, exist_ok=True)
+    with open(os.path.join(file_dir, filename), "wb") as f:
+        f.write(data)
+
     embeddings = embed(chunks)
 
     collection = get_collection()
@@ -224,7 +232,26 @@ def delete_document(doc_id: str) -> int:
     ids = results.get("ids", [])
     if ids:
         collection.delete(ids=ids)
+    file_dir = os.path.join(FILES_DIR, doc_id)
+    if os.path.exists(file_dir):
+        shutil.rmtree(file_dir)
     return len(ids)
+
+
+# ---------------------------------------------------------------------------
+# File retrieval
+# ---------------------------------------------------------------------------
+
+def get_document_file(doc_id: str) -> tuple[str, str] | None:
+    """Returns (file_path, filename) or None if the original file is not stored."""
+    file_dir = os.path.join(FILES_DIR, doc_id)
+    if not os.path.isdir(file_dir):
+        return None
+    files = os.listdir(file_dir)
+    if not files:
+        return None
+    filename = files[0]
+    return os.path.join(file_dir, filename), filename
 
 
 # ---------------------------------------------------------------------------

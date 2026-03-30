@@ -262,6 +262,14 @@ def delete_document(doc_id: str, filename: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def fetch_document_file(doc_id: str) -> bytes | None:
+    try:
+        resp = requests.get(f"{API_BASE}/documents/{doc_id}/download", timeout=30)
+        return resp.content if resp.ok else None
+    except Exception:
+        return None
+
+
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 
 st.title(":material/query_stats: VR OPS Dashboard")
@@ -460,10 +468,29 @@ with tab_sop:
         st.info("No documents ingested yet. Upload one above.")
     else:
         for doc in docs:
-            col_name, col_chunks, col_date, col_del = st.columns([3, 1, 2, 1])
+            col_name, col_chunks, col_date, col_dl, col_del = st.columns([3, 1, 2, 1, 1])
             col_name.write(f"**{doc['filename']}**")
             col_chunks.write(f"{doc['chunk_count']} chunks")
             col_date.write(doc.get("ingested_at", "")[:10])
+
+            dl_key = f"dl_data_{doc['doc_id']}"
+            if dl_key not in st.session_state:
+                if col_dl.button("Download", key=f"dl_btn_{doc['doc_id']}", type="secondary"):
+                    with st.spinner(f"Fetching `{doc['filename']}`…"):
+                        file_bytes = fetch_document_file(doc["doc_id"])
+                    if file_bytes:
+                        st.session_state[dl_key] = file_bytes
+                        st.rerun()
+                    else:
+                        col_dl.error("Not available.")
+            else:
+                col_dl.download_button(
+                    "Save",
+                    data=st.session_state[dl_key],
+                    file_name=doc["filename"],
+                    key=f"dl_save_{doc['doc_id']}",
+                    type="primary",
+                )
 
             if col_del.button("Delete", key=doc["doc_id"], type="secondary"):
                 with st.spinner(f"Removing `{doc['filename']}`…"):
