@@ -120,6 +120,75 @@ def filter_by_horizon(df: pd.DataFrame, horizon_label: str) -> pd.DataFrame:
     return df[df["Date"].between(latest - HORIZON_OPTIONS[horizon_label], latest)]
 
 
+def most_wrong_step(df: pd.DataFrame) -> tuple[str, int]:
+    """Return the step with the highest Wrong count and that count."""
+    if df.empty:
+        return "N/A", 0
+
+    wrong_counts: dict[int, int] = {}
+    for step in STEP_NUMBERS:
+        appraisal_col = f"Step {step} Appraisal"
+        wrong_counts[step] = int((df[appraisal_col] == "Wrong").sum())
+
+    max_wrong = max(wrong_counts.values()) if wrong_counts else 0
+    if max_wrong == 0:
+        return "No wrong steps", 0
+
+    top_step = min(step for step, count in wrong_counts.items() if count == max_wrong)
+    return f"Step {top_step}", max_wrong
+
+
+def render_error_step_card(container, title: str, step_label: str, error_count: int) -> None:
+    """Render a styled card so the most-error step stands out clearly."""
+    safe_step = step_label if step_label else "N/A"
+    count_color = "#ef4444" if error_count > 0 else "#94a3b8"
+    container.markdown(
+        f"""
+        <div style="
+            border: 1px solid #314158;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(15,23,43,0.95), rgba(15,23,43,0.75));
+            padding: 12px 14px;
+            margin: 8px 0;
+        ">
+            <div style="font-size:0.82rem; color:#9fb0c8; margin-bottom:4px;">{title}</div>
+            <div style="font-size:1.75rem; font-weight:700; color:#f8fafc; line-height:1.15;">{safe_step}</div>
+            <div style="font-size:0.9rem; color:{count_color}; margin-top:6px; font-weight:600;">
+                {error_count} errors
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def session_sort_key(session_label: str) -> int:
+    """Sort labels like 'Session 1', 'Session 2', ... numerically."""
+    value = str(session_label).strip()
+    if value.startswith("Session "):
+        number_text = value.replace("Session ", "", 1)
+        if number_text.isdigit():
+            return int(number_text)
+    return 10**9
+
+
+def session_focus_control(container, session_labels: list[str], key: str) -> str | None:
+    """Let users click a session number to emphasize that session on the chart."""
+    if len(session_labels) <= 1:
+        return None
+    with container:
+        selected = st.pills(
+            "Highlight session",
+            options=["All sessions", *session_labels],
+            selection_mode="single",
+            default="All sessions",
+            key=key,
+            help="Select a session number to highlight its curve.",
+            width="stretch",
+        )
+    return None if selected in (None, "All sessions") else selected
+
+
 def step_chart_records(df: pd.DataFrame) -> pd.DataFrame:
     records = []
     for step in STEP_NUMBERS:
@@ -170,9 +239,30 @@ def step_segment_records(step_points: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(segments).sort_values(["Session", "Segment", "Step"])
 
 
-def render_step_chart(step_records: pd.DataFrame, step_segments: pd.DataFrame, container) -> None:
+def render_step_chart(
+    step_records: pd.DataFrame,
+    step_segments: pd.DataFrame,
+    container,
+    highlight_session: str | None = None,
+) -> None:
     session_count = step_records["Session"].nunique()
     fill_palette = ["#86efac", "#fca5a5"]
+    session_order = sorted(step_records["Session"].dropna().unique(), key=session_sort_key)
+    has_session_focus = (
+        session_count > 1
+        and bool(highlight_session)
+        and highlight_session in set(step_records["Session"].dropna().tolist())
+    )
+    if has_session_focus:
+        step_records = step_records.assign(IsFocus=step_records["Session"] == highlight_session)
+        step_segments = step_segments.assign(IsFocus=step_segments["Session"] == highlight_session)
+    session_legend = alt.Legend(
+        title="Session",
+        orient="bottom",
+        direction="horizontal",
+        columns=max(1, min(12, len(session_order))),
+        labelLimit=120,
+    )
 
     x_axis = alt.X(
         "Step:Q", title="Step",
@@ -181,7 +271,13 @@ def render_step_chart(step_records: pd.DataFrame, step_segments: pd.DataFrame, c
     )
     y_axis = alt.Y("Step Time (mins):Q", title="Time (mins)", scale=alt.Scale(domainMin=0), stack=None)
 
-    fill_chart = alt.Chart(step_segments).mark_area(opacity=0.24, interpolate="linear").encode(
+    if session_count <= 1:
+        fill_opacity = alt.value(0.24)
+    elif has_session_focus:
+        fill_opacity = alt.condition("datum.IsFocus", alt.value(0.42), alt.value(0.03))
+    else:
+        fill_opacity = alt.value(0.24)
+    fill_chart = alt.Chart(step_segments).mark_area(interpolate="linear").encode(
         x_axis, y_axis,
         detail="Segment:N",
         color=alt.Color(
@@ -189,6 +285,7 @@ def render_step_chart(step_records: pd.DataFrame, step_segments: pd.DataFrame, c
             scale=alt.Scale(domain=["Right", "Wrong"], range=fill_palette),
             legend=alt.Legend(title="Segment fill"),
         ),
+        opacity=fill_opacity,
         tooltip=[
             alt.Tooltip("Session:N"), alt.Tooltip("Date:T"),
             alt.Tooltip("Step:Q"), alt.Tooltip("Appraisal:N"),
@@ -205,12 +302,24 @@ def render_step_chart(step_records: pd.DataFrame, step_segments: pd.DataFrame, c
 
     if session_count == 1:
         line_chart = alt.Chart(step_records).mark_line(**line_kwargs).encode(
-            x_axis, y_axis, detail="Session:N", tooltip=common_tooltip,
+            x_axis, y_axis, detail="Session:N", tooltip=common_tooltip, opacity=alt.value(1.0),
         )
     else:
+        line_opacity = (
+            alt.condition("datum.IsFocus", alt.value(1.0), alt.value(0.08))
+            if has_session_focus
+            else alt.value(1.0)
+        )
+        line_width = (
+            alt.condition("datum.IsFocus", alt.value(3.4), alt.value(0.9))
+            if has_session_focus
+            else alt.value(2.1)
+        )
         line_chart = alt.Chart(step_records).mark_line(**line_kwargs).encode(
             x_axis, y_axis, detail="Session:N",
-            strokeDash=alt.StrokeDash("Session:N", legend=alt.Legend(title="Session", orient="bottom")),
+            strokeDash=alt.StrokeDash("Session:N", sort=session_order, legend=session_legend),
+            opacity=line_opacity,
+            strokeWidth=line_width,
             tooltip=common_tooltip,
         )
 
@@ -336,7 +445,7 @@ with tab_perf:
 
                     with right_cell:
                         show_completion = st.toggle(
-                            "Trainee Error and Completion Trends", value=False,
+                            "Trainee Error and Completion Trends", value=True,
                             help="Switch between mistakes and completion time.",
                         )
                         y_field = "Completion Time (mins)" if show_completion else "Number of errors"
@@ -374,6 +483,13 @@ with tab_perf:
                         options=step_trainees,
                         index=default_step_trainee_index,
                     )
+                step_prev_trainee_key = "step_prev_trainee"
+                highlight_session_all_key = "highlight_session_all"
+                highlight_session_range_key = "highlight_session_range"
+                if st.session_state.get(step_prev_trainee_key) != selected_step_trainee:
+                    st.session_state[highlight_session_all_key] = "All sessions"
+                    st.session_state[highlight_session_range_key] = "All sessions"
+                    st.session_state[step_prev_trainee_key] = selected_step_trainee
 
                 selected_step_rows = (
                     step_source[step_source["Name"] == selected_step_trainee]
@@ -383,8 +499,6 @@ with tab_perf:
                 selected_step_rows["Session"] = (
                     "Session "
                     + (selected_step_rows.index + 1).astype(str)
-                    + " | "
-                    + selected_step_rows["Date"].dt.strftime("%Y-%m-%d %H:%M")
                 )
                 date_min = selected_step_rows["Date"].min().date()
                 date_max = selected_step_rows["Date"].max().date()
@@ -393,44 +507,142 @@ with tab_perf:
                 if default_end < default_start:
                     default_end = default_start
 
+                step_view_mode_key = "step_view_mode"
+                step_prev_range_key = "step_prev_date_range"
+                if step_view_mode_key not in st.session_state:
+                    st.session_state[step_view_mode_key] = "range"
+
                 with step_filter_cell:
                     selected_date_range = st.date_input(
                         "Date range", value=(default_start, default_end),
                         min_value=date_min, max_value=date_max,
                     )
-                    last_session_only = st.button(
-                        "Last Session", use_container_width=True,
-                        help="Show only the most recent session.",
+                    normalized_date_range = (
+                        tuple(selected_date_range)
+                        if isinstance(selected_date_range, (tuple, list))
+                        else selected_date_range
                     )
+                    if st.session_state.get(step_prev_range_key) != normalized_date_range:
+                        st.session_state[step_view_mode_key] = "range"
+                        st.session_state[step_prev_range_key] = normalized_date_range
+
+                    mode_cols = st.columns(2)
+                    if mode_cols[0].button(
+                        "All Sessions",
+                        key="all_sessions_btn",
+                        use_container_width=True,
+                        help="Show all sessions across the full available date range for the selected trainee.",
+                    ):
+                        st.session_state[step_view_mode_key] = "all"
+                    if mode_cols[1].button(
+                        "Last Session",
+                        key="last_session_btn",
+                        use_container_width=True,
+                        help="Show only the most recent session.",
+                    ):
+                        st.session_state[step_view_mode_key] = "last"
+
+                step_view_mode = st.session_state[step_view_mode_key]
 
                 single_date_selected = not (
                     isinstance(selected_date_range, (tuple, list)) and len(selected_date_range) == 2
                 )
+                trainee_wrong_step, trainee_wrong_count = "N/A", 0
+                all_wrong_step, all_wrong_count = "N/A", 0
+                trainee_range_rows = pd.DataFrame()
+                all_range_rows = pd.DataFrame()
 
-                if last_session_only:
+                if step_view_mode == "all":
+                    trainee_range_rows = selected_step_rows
+                    all_range_rows = step_source
+                elif not single_date_selected:
+                    step_start_date, step_end_date = selected_date_range
+                    range_start_ts = pd.Timestamp(step_start_date)
+                    range_end_ts = (
+                        pd.Timestamp(step_end_date)
+                        + pd.Timedelta(days=1)
+                        - pd.Timedelta(seconds=1)
+                    )
+                    trainee_range_rows = selected_step_rows[
+                        selected_step_rows["Date"].between(range_start_ts, range_end_ts)
+                    ]
+                    all_range_rows = step_source[
+                        step_source["Date"].between(range_start_ts, range_end_ts)
+                    ]
+
+                if step_view_mode == "all" or not single_date_selected:
+                    trainee_wrong_step, trainee_wrong_count = most_wrong_step(trainee_range_rows)
+                    all_wrong_step, all_wrong_count = most_wrong_step(all_range_rows)
+
+                with step_filter_cell:
+                    render_error_step_card(
+                        step_filter_cell,
+                        "Step with Highest Error Count (Selected Trainee)",
+                        trainee_wrong_step,
+                        trainee_wrong_count,
+                    )
+                    render_error_step_card(
+                        step_filter_cell,
+                        "Step with Highest Error Count (All Trainees)",
+                        all_wrong_step,
+                        all_wrong_count,
+                    )
+
+                if step_view_mode == "all":
+                    step_filtered = selected_step_rows
+                    step_records = step_chart_records(step_filtered)
+                    step_segments = step_segment_records(step_records)
+                    if step_records.empty or step_segments.empty:
+                        step_chart_cell.info("No step records found for the selected trainee.")
+                    else:
+                        highlight_session = session_focus_control(
+                            step_filter_cell,
+                            sorted(step_records["Session"].dropna().unique().tolist(), key=session_sort_key),
+                            key=highlight_session_all_key,
+                        )
+                        with step_chart_cell:
+                            st.caption(
+                                f"Showing all sessions from {date_min:%Y-%m-%d} to {date_max:%Y-%m-%d}"
+                            )
+                        render_step_chart(
+                            step_records,
+                            step_segments,
+                            step_chart_cell,
+                            highlight_session=highlight_session,
+                        )
+                elif step_view_mode == "last":
                     step_filtered = selected_step_rows.tail(1)
                     step_records = step_chart_records(step_filtered)
                     step_segments = step_segment_records(step_records)
                     if step_records.empty or step_segments.empty:
                         step_chart_cell.info("No step records found for the last session.")
                     else:
+                        last_session_date = step_filtered["Date"].iloc[-1]
+                        with step_chart_cell:
+                            st.caption(
+                                f"Showing last session from {last_session_date:%Y-%m-%d %H:%M}"
+                            )
                         render_step_chart(step_records, step_segments, step_chart_cell)
                 elif single_date_selected:
                     step_chart_cell.caption("Please select both a start date and an end date.")
                 else:
-                    step_start_date, step_end_date = selected_date_range
-                    step_filtered = selected_step_rows[
-                        selected_step_rows["Date"].between(
-                            pd.Timestamp(step_start_date),
-                            pd.Timestamp(step_end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1),
-                        )
-                    ]
+                    step_filtered = trainee_range_rows
                     step_records = step_chart_records(step_filtered)
                     step_segments = step_segment_records(step_records)
                     if step_records.empty or step_segments.empty:
                         step_chart_cell.info("No step records match the selected trainee and date range.")
                     else:
-                        render_step_chart(step_records, step_segments, step_chart_cell)
+                        highlight_session = session_focus_control(
+                            step_filter_cell,
+                            sorted(step_records["Session"].dropna().unique().tolist(), key=session_sort_key),
+                            key=highlight_session_range_key,
+                        )
+                        render_step_chart(
+                            step_records,
+                            step_segments,
+                            step_chart_cell,
+                            highlight_session=highlight_session,
+                        )
 
 
 # ── Tab 2: SOP Manager ───────────────────────────────────────────────────────
