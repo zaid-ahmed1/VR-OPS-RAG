@@ -39,7 +39,7 @@ API_BASE = "http://localhost:8000"
 POSTGREST_URL = os.environ.get("POSTGREST_URL", "http://localhost:3000")
 DEFAULT_DATA_PATH = Path(__file__).parent / "trainee_performance_sample.xlsx"
 
-STEP_NUMBERS = list(range(1, 19))
+STEP_NUMBERS = list(range(1, 13))
 STEP_APPRAISAL_COLUMNS = [f"Step {step} Appraisal" for step in STEP_NUMBERS]
 STEP_TIME_COLUMNS = [f"Step {step} Time" for step in STEP_NUMBERS]
 REQUIRED_COLUMNS = [

@@ -9,7 +9,14 @@
       "Bash(do echo:*)",
       "Read(//c/Users/zaida/Documents/VR-OPS-RAG/**)",
       "Bash(done)",
-      "Bash(grep -r \"import\\\\|from\" /c/Users/zaida/Documents/VR-OPS-RAG/*.py /c/Users/zaida/Documents/VR-OPS-RAG/api/*.py /c/Users/zaida/Documents/VR-OPS-RAG/dashboard/*.py)"
+      "Bash(grep -r \"import\\\\|from\" /c/Users/zaida/Documents/VR-OPS-RAG/*.py /c/Users/zaida/Documents/VR-OPS-RAG/api/*.py /c/Users/zaida/Documents/VR-OPS-RAG/dashboard/*.py)",
+      "Bash(python:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_api.py -v -s 2>&1)",
+      "Bash(curl -s --connect-timeout 5 http://10.44.122.161/api/documents)",
+      "Bash(.venv/Scripts/python -c \"\nimport pandas as pd\ndf = pd.read_excel\\('dashboard/trainee_performance_sample.xlsx'\\)\nprint\\('Shape:', df.shape\\)\nprint\\('Columns:', list\\(df.columns\\)\\)\nprint\\(\\)\nprint\\('Unique trainees:', sorted\\(df['Name'].unique\\(\\)\\)\\)\nprint\\(\\)\nprint\\(df.head\\(2\\).to_string\\(\\)\\)\n\")",
+      "Bash(.venv/Scripts/python -c \":*)",
+      "Bash(.venv/Scripts/python -c \"\nimport pandas as pd\ndf = pd.read_excel\\('dashboard/trainee_performance_sample.xlsx'\\)\nprint\\('Excel columns \\(28 expected\\):', len\\(df.columns\\)\\)\nprint\\('Step columns present:'\\)\nfor s in range\\(1, 13\\):\n    a = f'Step {s} Appraisal' in df.columns\n    t = f'Step {s} Time' in df.columns\n    print\\(f'  Step {s}: Appraisal={a}, Time={t}'\\)\nprint\\(\\)\nprint\\('Sample row error count:', df.iloc[0]['Number of errors']\\)\nprint\\('Sample row completion time:', df.iloc[0]['Completion Time \\(mins\\)']\\)\n\")"
     ]
   }
 }
