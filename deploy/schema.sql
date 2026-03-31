@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS session_steps (
     id          SERIAL PRIMARY KEY,
     session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    step_number INTEGER NOT NULL CHECK (step_number BETWEEN 1 AND 8),
+    step_number INTEGER NOT NULL CHECK (step_number BETWEEN 1 AND 12),
     time_mins   NUMERIC,
     appraisal   TEXT CHECK (appraisal IN ('Right', 'Wrong')),
     UNIQUE (session_id, step_number)
@@ -42,6 +42,10 @@ SELECT
     MAX(CASE WHEN ss.step_number = 6 THEN ss.appraisal END)        AS "Step 6 Appraisal",
     MAX(CASE WHEN ss.step_number = 7 THEN ss.appraisal END)        AS "Step 7 Appraisal",
     MAX(CASE WHEN ss.step_number = 8 THEN ss.appraisal END)        AS "Step 8 Appraisal",
+    MAX(CASE WHEN ss.step_number = 9 THEN ss.appraisal END)        AS "Step 9 Appraisal",
+    MAX(CASE WHEN ss.step_number = 10 THEN ss.appraisal END)       AS "Step 10 Appraisal",
+    MAX(CASE WHEN ss.step_number = 11 THEN ss.appraisal END)       AS "Step 11 Appraisal",
+    MAX(CASE WHEN ss.step_number = 12 THEN ss.appraisal END)       AS "Step 12 Appraisal",
     MAX(CASE WHEN ss.step_number = 1 THEN ss.time_mins END)        AS "Step 1 Time",
     MAX(CASE WHEN ss.step_number = 2 THEN ss.time_mins END)        AS "Step 2 Time",
     MAX(CASE WHEN ss.step_number = 3 THEN ss.time_mins END)        AS "Step 3 Time",
@@ -49,7 +53,11 @@ SELECT
     MAX(CASE WHEN ss.step_number = 5 THEN ss.time_mins END)        AS "Step 5 Time",
     MAX(CASE WHEN ss.step_number = 6 THEN ss.time_mins END)        AS "Step 6 Time",
     MAX(CASE WHEN ss.step_number = 7 THEN ss.time_mins END)        AS "Step 7 Time",
-    MAX(CASE WHEN ss.step_number = 8 THEN ss.time_mins END)        AS "Step 8 Time"
+    MAX(CASE WHEN ss.step_number = 8 THEN ss.time_mins END)        AS "Step 8 Time",
+    MAX(CASE WHEN ss.step_number = 9 THEN ss.time_mins END)        AS "Step 9 Time",
+    MAX(CASE WHEN ss.step_number = 10 THEN ss.time_mins END)       AS "Step 10 Time",
+    MAX(CASE WHEN ss.step_number = 11 THEN ss.time_mins END)       AS "Step 11 Time",
+    MAX(CASE WHEN ss.step_number = 12 THEN ss.time_mins END)       AS "Step 12 Time"
 FROM sessions s
 JOIN trainees t ON t.id = s.trainee_id
 LEFT JOIN session_steps ss ON ss.session_id = s.id

@@ -18,7 +18,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
 
-STEP_NUMBERS = list(range(1, 9))
+STEP_NUMBERS = list(range(1, 13))
 
 
 def load_xlsx(path: Path) -> pd.DataFrame:

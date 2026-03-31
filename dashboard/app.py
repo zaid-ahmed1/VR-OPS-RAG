@@ -39,7 +39,7 @@ API_BASE = "http://localhost:8000"
 POSTGREST_URL = os.environ.get("POSTGREST_URL", "http://localhost:3000")
 DEFAULT_DATA_PATH = Path(__file__).parent / "trainee_performance_sample.xlsx"
 
-STEP_NUMBERS = list(range(1, 9))
+STEP_NUMBERS = list(range(1, 13))
 STEP_APPRAISAL_COLUMNS = [f"Step {step} Appraisal" for step in STEP_NUMBERS]
 STEP_TIME_COLUMNS = [f"Step {step} Time" for step in STEP_NUMBERS]
 REQUIRED_COLUMNS = [
@@ -176,8 +176,8 @@ def render_step_chart(step_records: pd.DataFrame, step_segments: pd.DataFrame, c
 
     x_axis = alt.X(
         "Step:Q", title="Step",
-        scale=alt.Scale(domain=[0, 8], nice=False),
-        axis=alt.Axis(values=list(range(0, 9))),
+        scale=alt.Scale(domain=[0, 12], nice=False),
+        axis=alt.Axis(values=list(range(0, 13))),
     )
     y_axis = alt.Y("Step Time (mins):Q", title="Time (mins)", scale=alt.Scale(domainMin=0), stack=None)
 
